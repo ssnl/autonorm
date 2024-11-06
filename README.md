@@ -36,6 +36,7 @@ It is a has-a subclass of `torch.Tensor`. In fact, it is a "has-two-tensors".
 In addition, it also has
 + `elem_dims` that specifies which dimensions we are norm'ing over.
 
+---
 **How do I implement a normed rule for a PyTorch op or a custom function (composed of several ops)?**
 
 Rather simple, for a PyTorch op, one can simply
@@ -69,6 +70,7 @@ def _(input: NormedTensorBase, scale: torch.Tensor) -> NormedTensorBase:
 y = mul_with_scaler(x, scale)  # use this op this way
 ```
 
+---
 **How does `auto_norm` run normed tensors over real computation graphs?**
 
 Under the hood, everything is implemented by PyTorch custom ops. An `auto_norm` wrapper custom op can wrap either (1) a PyTorch function (e.g., `torch.nn.functional.linear`) or (2) a custom function that can perform multiple operations (e.g., `zeropower_via_newtonschulz5`).
@@ -96,9 +98,12 @@ For these custom ops, we perform dispatching in three ways:
     1. Call the normed implementations for the wrapper custom ops (which could call normal ops on regular `Tensor`s).
     2. Allow regular `Tensor` ops be invoked during normed implementation calls.
 
+---
 **How does `auto_norm` work?**
+
 When given a module, we first `torch.export` it with the **fake** mode, converting it to a `torch.fx.Graph` with only wrapped custom ops. Then, `norm_map` run normed tensors on this exported graph with dispatch rules specified above in a **normed** mode.
 
+---
 ## State of `auto_norm`
 
 - [x] proof of concept that can trace general PyTorch modules and backprop through `norm_map`
