@@ -1,23 +1,28 @@
 # auto_norm
 
-`auto_norm.build_norm_map` is the key entrypoint, it returns a `norm_map` function that computes computes (norms of inputs, norms of parameters, norms of buffers) -> norms of outputs.
+`auto_norm.build_norm_map` is the key entrypoint, it returns a `norm_map` function that computes the mapping
+```
+(norms of inputs, norms of parameters, norms of buffers) -> norms of outputs
+```
 
 Its syntax is
 
 ```py
-def build_norm_map(module: nn.Module, *example_args, dynamic_shapes: Optional = None, **example_kwargs):
+def build_norm_map(module: nn.Module, *example_args, dynamic_shapes: Optional = None,
+                   **example_kwargs):
     ...
 
     def norm_map(*normed_args, normed_state_dict, **normed_kwargs):
-        # normed_* should generally contain auto_norm.*_NormTensor, instead of usual torch.Tensor
+        # normed_* should generally contain `auto_norm.*_NormTensor`s, instead of
+        # usual `torch.Tensor`s
         ...
         return normed_outputs
 
     return norm_map
 ```
 
-The resulting `norm_map` can be backproped through with `torch.autograd`. Therefore, one can
-1. Compute the Modula norm using the sensitivity definition
+The resulting `norm_map` can be **backproped** through with `torch.autograd`. Therefore, one can
+1. Compute the Modula norm using the sensitivity definition.
 2. Optimize norm sizes of weight tensors and scalar scaling factors.
 
 See [241105_auto_norm_ex.ipynb](./241105_auto_norm_ex.ipynb) for some examples.
@@ -25,9 +30,11 @@ See [241105_auto_norm_ex.ipynb](./241105_auto_norm_ex.ipynb) for some examples.
 
 ## FAQ
 
-**What is in a `NormedTensorBase`?**
+**What is in an `auto_norm.*_NormTensor`?**
 
-It is a has-a subclass of `torch.Tensor`. In fact, it is a "has-two-tensors".
+There are a few options currently implemented: `RMS_NormTensor`, `RMS_RMS_NormTensor`, `L1_NormTensor`, and `Linf_NormTensor`. All of them are direct subclasses of `NormedTensorBase`.
+
+`NormedTensorBase` is a has-a subclass of `torch.Tensor`. In fact, it is a "has-two-tensors".
 1. A "backing" tensor that this normed tensor is describing. It may not be a real tensor with actual data, but often, is a `FakeTensor` that has only metadata.
 
    In user land, when we create a normed tensor, we don't need to provide this backing tensor, as it will be automatically attached using information gathered from the module computation graph (specifically, the `FakeTensor`s created during `torch.export` in the **fake** mode, see below).
