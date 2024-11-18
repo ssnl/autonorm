@@ -10,13 +10,18 @@ import torch.utils._pytree as pytree
 from torch.export import Dim
 from torch.export.graph_signature import InputKind, OutputKind
 
-from .normed_tensor import NormedTensorBase, RMS_NormTensor, RMS_RMS_NormTensor, L1_NormTensor, Linf_NormTensor
+from .normed_tensor import NormedTensor, RMS_Tensor, RMSToRMS_Tensor, L1_Tensor, Linf_Tensor
 from .reg_fake_norm_op_registry import reg_fake_norm_op
 from .reg_fake_norm_ops import ConstantScaler
 
 from .fake_mode_export import fake_mode_export_to_custom_op_graph
-from .normed_mode_dispatch import normed_mode_propagate
+from .normed_mode_dispatch import NormPropagateDispatchMode
 
+
+# Three APIs
+# convert
+# backward
+# grad
 
 def build_norm_map(model: nn.Module, *args,
                    dynamic_shapes: Optional[List[Dict[int, Dim]]] = None,
@@ -46,7 +51,7 @@ def build_norm_map(model: nn.Module, *args,
                 input = normed_state_dict[target]
             else:
                 raise ValueError(f"Unknown input kind: {spec.kind}")
-            if isinstance(input, NormedTensorBase):
+            if isinstance(input, NormedTensor):
                 assert isinstance(node.meta['val'], FakeTensor)
                 input = input.finalize(node.meta['val'])
             inputs.append(input)
@@ -65,7 +70,7 @@ def build_norm_map(model: nn.Module, *args,
 
     def norm_map(*normed_args, normed_state_dict, **normed_kwargs):
         normed_inputs = build_normed_inputs(normed_args, normed_kwargs, normed_state_dict)
-        with normed_mode_propagate():
+        with NormPropagateDispatchMode():
             normed_outputs = ep.graph_module(*normed_inputs)
         return extract_normed_outputs(normed_outputs)
 
@@ -73,53 +78,4 @@ def build_norm_map(model: nn.Module, *args,
 
 
 __all__ = ['reg_fake_norm_op', 'ConstantScaler', 'build_norm_map',
-           'NormedTensorBase', 'RMS_NormTensor', 'RMS_RMS_NormTensor', 'L1_NormTensor', 'Linf_NormTensor']
-
-
-
-if __name__ == '__main__':
-    import torch
-
-    batch = Dim('batch')
-
-    class MyNet(nn.Module):
-        def __init__(self):
-            super().__init__()
-            self.linear = nn.Linear(15, 16)
-            self.net = nn.Sequential(
-                nn.Linear(15, 16),
-                nn.ReLU(),
-                nn.Linear(16, 16),
-                nn.ReLU(),
-                nn.Linear(16, 16),
-            )
-            self.scaler = ConstantScaler(2)
-
-        def forward(self, x):
-            v = self.scaler(x + torch.randn(15))
-            return self.linear(v) + self.net(v)
-
-    net = MyNet()
-    example_input = torch.randn(10, 15, requires_grad=True)
-
-    norm_map = build_norm_map(net, example_input, dynamic_shapes=[{0: batch}])
-
-    normed_state_dict = {}
-    for name, param in net.named_parameters():
-        if name.endswith('weight'):
-            normed_state_dict[name] = RMS_RMS_NormTensor(2 ** 0.5, elem_dims=(-1, -2))
-        elif name.endswith('bias'):
-            normed_state_dict[name] = RMS_NormTensor(0, elem_dims=(-1,))
-        else:
-            raise ValueError(f"Unknown parameter name: {name}")
-
-    for name, buffer in net.named_buffers():
-        if name.endswith('scale'):
-            normed_state_dict[name] = torch.tensor(1., requires_grad=True)
-        else:
-            raise ValueError(f"Unknown buffer name: {name}")
-
-    print(norm_map(
-        RMS_NormTensor(norm_size=1, elem_dims=(-1,)),
-        normed_state_dict=normed_state_dict,
-    ))
+           'NormedTensor', 'RMS_Tensor', 'RMSToRMS_Tensor', 'L1_Tensor', 'Linf_Tensor']

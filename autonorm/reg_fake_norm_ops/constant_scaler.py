@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from ..normed_tensor import NormedTensorBase
+from ..normed_tensor import NormedTensor
 from ..reg_fake_norm_op_registry import reg_fake_norm_op
 
 
@@ -12,7 +12,7 @@ class ConstantScaler(nn.Module):
         return input * scale
 
     @_mul_with_scaler.register_norm(allow_non_normed_tensor_inputs=True)
-    def _(input: NormedTensorBase, scale: torch.Tensor) -> NormedTensorBase:
+    def _(input: NormedTensor, scale: torch.Tensor) -> NormedTensor:
         assert scale.ndim == 0
         return input.__class__(input.norm_size * scale, elem_dims=input.elem_dims)
 

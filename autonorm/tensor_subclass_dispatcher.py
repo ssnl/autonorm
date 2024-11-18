@@ -12,9 +12,12 @@ from . import logger
 class TensorSubclassDispatcher:
     # dispatches things based on the classes of NormTensorBase arguments
 
+    custom_op: torch.library.CustomOpDef
+
     def __init__(self, ref_sig: inspect.Signature):
         self.ref_sig = ref_sig
-        self.handled_functions = OrderedDict()
+        self.handled_forwards = OrderedDict()
+        self.handled_backwards = OrderedDict()
         functools.update_wrapper(self, ref_sig)
 
         dispatch_key_arg_names = []
@@ -72,18 +75,19 @@ class TensorSubclassDispatcher:
             self._assert_specialized(self.ref_sig, specialized_sig, tensor_subclass_constraint)
             dispatch_key = tuple(specialized_sig.parameters[name].annotation for name in self.dispatch_key_arg_names)
             assert all(inspect.isclass(t) and tensor_subclass_constraint(t) for t in dispatch_key)
-            assert dispatch_key not in self.handled_functions
-            self.handled_functions[dispatch_key] = specialized_func
+            assert dispatch_key not in self.handled_forwards
+            self.handled_forwards[dispatch_key] = specialized_func
             return specialized_func
+
         if specialized_func is None:
             return decorator
         return decorator(specialized_func)
 
     def __call__(self, *args, **kwargs):
-        logger.debug(f"TensorSubclassDispatcher dispatching {args}, {kwargs}")
+        logger.debug(f"TensorSubclassDispatcher dispatching {self.ref_sig}")
         bound = self.ref_sig.bind(*args, **kwargs)
         dispatch_key = tuple(bound.arguments[name].__class__ for name in self.dispatch_key_arg_names)
-        for k, fn in self.handled_functions.items():
+        for k, fn in self.handled_forwards.items():
             if all(issubclass(q, k) for q, k in zip(dispatch_key, k)):
                 return fn(*args, **kwargs)
         raise NotImplementedError(f"No dispatch rule found for {dispatch_key}")
